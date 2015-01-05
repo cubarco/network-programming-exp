@@ -12,7 +12,7 @@
 #include <linux/if_tun.h>
 #include <net/if.h>
 
-#define MTU 1440
+#define MTU 1464
 #define BUFFSIZE MTU
 #define MODE_SERVER 0
 #define MODE_CLIENT 1
@@ -22,6 +22,7 @@
 typedef struct args {
     int mode;
     int port;
+    int mtu;
     char *remote_addr_str;
 } args_t;
 
@@ -79,22 +80,20 @@ static void local_udp_init()
 
 static void local_tun_init()
 {
-    int r;
     struct ifreq ifr;
-    ctx_v.tun_fd = open("/dev/net/tun", O_RDWR);
-    if (ctx_v.tun_fd < 0) {
+    int fd;
+    if ( (ctx_v.tun_fd = open("/dev/net/tun", O_RDWR)) < 0)
         PERROR("tun open");
-        exit(1);
-    }
     make_socket_non_blocking(ctx_v.tun_fd);
     memset(&ifr, 0, sizeof(ifr));
-    ifr.ifr_flags = IFF_TUN;
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
-    r = ioctl(ctx_v.tun_fd, TUNSETIFF, &ifr);
-    if (r < 0) {
+    ifr.ifr_flags = IFF_TUN;
+    if (ioctl(ctx_v.tun_fd, TUNSETIFF, &ifr) < 0)
         PERROR("tun ioctl");
-        exit(1);
-    }
+    ifr.ifr_mtu = args_v.mtu == 0 ? MTU : args_v.mtu;
+    fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (ioctl(fd, SIOCSIFMTU, &ifr) < 0)
+        PERROR("tun ioctl");
 }
 
 static void signal_cb(EV_P_ ev_signal *w, int revents)
@@ -127,8 +126,8 @@ static void udp_cb(EV_P_ ev_io *w, int revents)
 
 static void usage(char *cmd)
 {
-    fprintf(stderr, "server: %s -s -p PORT\n", cmd);
-    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT\n", cmd);
+    fprintf(stderr, "server: %s -s -p PORT [-m MTU]\n", cmd);
+    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT [-m MTU]\n", cmd);
     exit(1);
 }
 
@@ -146,7 +145,7 @@ int main(int argc, char **argv)
 
     bzero(&ctx_v, sizeof(ctx_t));
     bzero(&args_v, sizeof(args_t));
-    while ((opt = getopt(argc, argv, "shc:p:")) != -1) {
+    while ((opt = getopt(argc, argv, "shc:p:m:")) != -1) {
         switch (opt) {
             case 's':
                 args_v.mode = MODE_SERVER;
@@ -159,6 +158,9 @@ int main(int argc, char **argv)
                 break;
             case 'p':
                 args_v.port = atoi(optarg);
+                break;
+            case 'm':
+                args_v.mtu = atoi(optarg);
                 break;
             case 'h':
             default:
