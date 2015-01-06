@@ -1,8 +1,5 @@
 #ifndef VPN_H
 #define VPN_H
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <getopt.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -14,7 +11,8 @@
 #include <linux/if_tun.h>
 #include <net/if.h>
 
-#define MTU 1464
+/* 1492(Ethernet) - 20(IPv4) - 8(UDP) - 16(SSL trailing) */
+#define MTU 1448
 #define BUFFSIZE 1500
 #define MODE_SERVER 0
 #define MODE_CLIENT 1
@@ -25,6 +23,7 @@ typedef struct args {
     int mode;
     int port;
     int mtu;
+    char *pwd;
     char *remote_addr_str;
 } args_t;
 
@@ -34,7 +33,8 @@ typedef struct ctx {
     int mode;
     int mtu;
     socklen_t remote_addr_len;
-    char *buf;
+    unsigned char *buf;
+    unsigned char *crypto_buf;
     struct sockaddr_in local_addr;
     struct sockaddr_in remote_addr;
 } ctx_t;
@@ -42,5 +42,6 @@ typedef struct ctx {
 struct ctx ctx_v;
 struct args args_v;
 
-int ioresult;
+int result;
+
 #endif

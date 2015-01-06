@@ -1,9 +1,9 @@
 CC = gcc
 CFLAGS += -Wall
-LDFLAGS += -lev
+LDFLAGS += -lev -lcrypto
 
-vpn: vpn.o
-vpn.o: vpn.c
+vpn: vpn.o crypto.o
+vpn.o: vpn.c crypto.c
 
 .PHONY: all clean
 all: vpn

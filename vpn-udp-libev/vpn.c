@@ -1,4 +1,6 @@
+#include "common.h"
 #include "vpn.h"
+#include "crypto.h"
 
 static int make_socket_non_blocking (int sfd)
 {
@@ -69,31 +71,37 @@ static void signal_cb(EV_P_ ev_signal *w, int revents)
 
 static void tun_cb(EV_P_ ev_io *w, int revents)
 {
-    if ((ioresult = read(ctx_v.tun_fd, ctx_v.buf, BUFFSIZE)) < 0) {
+    if ((result = read(ctx_v.tun_fd, ctx_v.buf, BUFFSIZE)) < 0) {
         perror("read from tunnel");
         return;
     }
+    result = crypto_encrypt(ctx_v.buf, ctx_v.crypto_buf, result);
+    if (-1 == result)
+        return;
     if (ctx_v.remote_addr_len != 0)
-        sendto(ctx_v.local_fd, ctx_v.buf, ioresult, 0,
+        sendto(ctx_v.local_fd, ctx_v.crypto_buf, result, 0,
                 (struct sockaddr*)&ctx_v.remote_addr, ctx_v.remote_addr_len);
 }
 
 static void udp_cb(EV_P_ ev_io *w, int revents)
 {
-    ioresult = recvfrom(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
+    result = recvfrom(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
                                 (struct sockaddr*)&ctx_v.remote_addr,
                                 &ctx_v.remote_addr_len);
-    if (ioresult < 0) {
+    if (result < 0) {
         perror("recvfrom");
         return;
     }
-    write(ctx_v.tun_fd, ctx_v.buf, ioresult);
+    result = crypto_decrypt(ctx_v.buf, ctx_v.crypto_buf, result);
+    if (-1 == result)
+        return;
+    write(ctx_v.tun_fd, ctx_v.crypto_buf, result);
 }
 
 static void usage(char *cmd)
 {
-    fprintf(stderr, "server: %s -s -p PORT [-m MTU]\n", cmd);
-    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT [-m MTU]\n", cmd);
+    fprintf(stderr, "server: %s -s -p PORT -k PASSWORD [-m MTU]\n", cmd);
+    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-m MTU]\n", cmd);
     exit(1);
 }
 
@@ -106,12 +114,10 @@ int main(int argc, char **argv)
     ev_io tun_watcher;
     ev_io local_udp_watcher;
 
-    if (argc < 3)
-        usage(argv[0]);
-
     bzero(&ctx_v, sizeof(ctx_t));
     bzero(&args_v, sizeof(args_t));
-    while ((opt = getopt(argc, argv, "shc:p:m:")) != -1) {
+    args_v.mode = -1;
+    while ((opt = getopt(argc, argv, "shc:p:k:m:")) != -1) {
         switch (opt) {
             case 's':
                 args_v.mode = MODE_SERVER;
@@ -128,15 +134,23 @@ int main(int argc, char **argv)
             case 'm':
                 args_v.mtu = atoi(optarg);
                 break;
+            case 'k':
+                args_v.pwd = strdup(optarg);
+                break;
             case 'h':
             default:
                 usage(argv[0]);
         }
     }
+    if (args_v.mode == -1 || !args_v.port || !args_v.pwd)
+        usage(argv[0]);
 
     ctx_v.buf = malloc(BUFFSIZE);
+    ctx_v.crypto_buf = malloc(BUFFSIZE);
     ctx_v.mode = args_v.mode;
     ctx_v.mtu = args_v.mtu == 0 ? MTU : args_v.mtu;
+    if (-1 == crypto_init(args_v.pwd))
+        exit(1);
     local_udp_init();
     local_tun_init();
 
