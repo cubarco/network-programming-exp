@@ -13,7 +13,7 @@
 #include <net/if.h>
 
 #define MTU 1464
-#define BUFFSIZE MTU
+#define BUFFSIZE 1500
 #define MODE_SERVER 0
 #define MODE_CLIENT 1
 
@@ -30,6 +30,7 @@ typedef struct ctx {
     int local_fd;
     int tun_fd;
     int mode;
+    int mtu;
     socklen_t remote_addr_len;
     char *buf;
     struct sockaddr_in local_addr;
@@ -38,6 +39,7 @@ typedef struct ctx {
 
 struct ctx ctx_v;
 struct args args_v;
+int ioresult;
 
 static int make_socket_non_blocking (int sfd)
 {
@@ -58,8 +60,7 @@ static int make_socket_non_blocking (int sfd)
 
 static void local_udp_init()
 {
-    ctx_v.buf = malloc(BUFFSIZE);
-    ctx_v.mode = args_v.mode;
+    ctx_v.remote_addr_len = sizeof(ctx_v.remote_addr);
     ctx_v.local_fd = socket(AF_INET, SOCK_DGRAM, 0);
     make_socket_non_blocking(ctx_v.local_fd);
     if (ctx_v.mode == MODE_SERVER){
@@ -82,15 +83,15 @@ static void local_tun_init()
 {
     struct ifreq ifr;
     int fd;
-    if ( (ctx_v.tun_fd = open("/dev/net/tun", O_RDWR)) < 0)
+    if ( (ctx_v.tun_fd = open("/dev/net/tun", O_RDWR) ) < 0)
         PERROR("tun open");
     make_socket_non_blocking(ctx_v.tun_fd);
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
-    ifr.ifr_flags = IFF_TUN;
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
     if (ioctl(ctx_v.tun_fd, TUNSETIFF, &ifr) < 0)
         PERROR("tun ioctl");
-    ifr.ifr_mtu = args_v.mtu == 0 ? MTU : args_v.mtu;
+    ifr.ifr_mtu = ctx_v.mtu;
     fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (ioctl(fd, SIOCSIFMTU, &ifr) < 0)
         PERROR("tun ioctl");
@@ -109,19 +110,25 @@ static void signal_cb(EV_P_ ev_signal *w, int revents)
 
 static void tun_cb(EV_P_ ev_io *w, int revents)
 {
-    bzero(ctx_v.buf, BUFFSIZE);
-    read(ctx_v.tun_fd, ctx_v.buf, BUFFSIZE);
+    if ((ioresult = read(ctx_v.tun_fd, ctx_v.buf, BUFFSIZE)) < 0) {
+        perror("read from tunnel");
+        return;
+    }
     if (ctx_v.remote_addr_len != 0)
-        sendto(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
+        sendto(ctx_v.local_fd, ctx_v.buf, ioresult, 0,
                 (struct sockaddr*)&ctx_v.remote_addr, ctx_v.remote_addr_len);
 }
 
 static void udp_cb(EV_P_ ev_io *w, int revents)
 {
-    bzero(ctx_v.buf, BUFFSIZE);
-    recvfrom(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
-            (struct sockaddr*)&ctx_v.remote_addr, &ctx_v.remote_addr_len);
-    write(ctx_v.tun_fd, ctx_v.buf, BUFFSIZE);
+    ioresult = recvfrom(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
+                                (struct sockaddr*)&ctx_v.remote_addr,
+                                &ctx_v.remote_addr_len);
+    if (ioresult < 0) {
+        perror("recvfrom");
+        return;
+    }
+    write(ctx_v.tun_fd, ctx_v.buf, ioresult);
 }
 
 static void usage(char *cmd)
@@ -168,6 +175,9 @@ int main(int argc, char **argv)
         }
     }
 
+    ctx_v.buf = malloc(BUFFSIZE);
+    ctx_v.mode = args_v.mode;
+    ctx_v.mtu = args_v.mtu == 0 ? MTU : args_v.mtu;
     local_udp_init();
     local_tun_init();
 
