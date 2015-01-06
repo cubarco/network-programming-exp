@@ -37,6 +37,7 @@ typedef struct ctx {
     unsigned char *crypto_buf;
     struct sockaddr_in local_addr;
     struct sockaddr_in remote_addr;
+    struct sockaddr_in temp_remote_addr;
 } ctx_t;
 
 struct ctx ctx_v;

@@ -78,16 +78,15 @@ static void tun_cb(EV_P_ ev_io *w, int revents)
     result = crypto_encrypt(ctx_v.buf, ctx_v.crypto_buf, result);
     if (-1 == result)
         return;
-    if (ctx_v.remote_addr_len != 0)
-        sendto(ctx_v.local_fd, ctx_v.crypto_buf, result, 0,
-                (struct sockaddr*)&ctx_v.remote_addr, ctx_v.remote_addr_len);
+    sendto(ctx_v.local_fd, ctx_v.crypto_buf, result, 0,
+            (struct sockaddr*)&ctx_v.remote_addr, ctx_v.remote_addr_len);
 }
 
 static void udp_cb(EV_P_ ev_io *w, int revents)
 {
     result = recvfrom(ctx_v.local_fd, ctx_v.buf, BUFFSIZE, 0,
-                                (struct sockaddr*)&ctx_v.remote_addr,
-                                &ctx_v.remote_addr_len);
+                        (struct sockaddr*)&ctx_v.temp_remote_addr,
+                            &ctx_v.remote_addr_len);
     if (result < 0) {
         perror("recvfrom");
         return;
@@ -95,6 +94,7 @@ static void udp_cb(EV_P_ ev_io *w, int revents)
     result = crypto_decrypt(ctx_v.buf, ctx_v.crypto_buf, result);
     if (-1 == result)
         return;
+    ctx_v.remote_addr = ctx_v.temp_remote_addr;
     write(ctx_v.tun_fd, ctx_v.crypto_buf, result);
 }
 
