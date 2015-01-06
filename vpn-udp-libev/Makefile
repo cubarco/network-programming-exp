@@ -2,10 +2,10 @@ CC = gcc
 CFLAGS += -Wall
 LDFLAGS += -lev
 
-vpn-udp-libev: vpn-udp-libev.o
-vpn-udp-libev.o: vpn-udp-libev.c
+vpn: vpn.o
+vpn.o: vpn.c
 
 .PHONY: all clean
-all: vpn-udp-libev
+all: vpn
 clean:
-	rm vpn-udp-libev *.o
+	rm vpn *.o

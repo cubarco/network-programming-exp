@@ -1,4 +1,4 @@
-#include "vpn-udp-libev.h"
+#include "vpn.h"
 
 static int make_socket_non_blocking (int sfd)
 {

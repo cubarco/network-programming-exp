@@ -1,3 +1,5 @@
+#ifndef VPN_H
+#define VPN_H
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,3 +43,4 @@ struct ctx ctx_v;
 struct args args_v;
 
 int ioresult;
+#endif
