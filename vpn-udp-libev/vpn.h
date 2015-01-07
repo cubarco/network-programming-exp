@@ -11,11 +11,11 @@
 #include <linux/if_tun.h>
 #include <net/if.h>
 
-/* 1492(Ethernet) - 20(IPv4) - 8(UDP) - 16(SSL trailing) */
-#define MTU 1448
+/* 1492(Ethernet) - 20(IPv4) - 8(UDP) - 16(SSL trailing) - 6(lzo) */
+#define MTU 1442
 #define BUFFSIZE 1500
-#define MODE_SERVER 0
-#define MODE_CLIENT 1
+#define MODE_SERVER 1 
+#define MODE_CLIENT 2
 
 #define PERROR(s) do {perror(s); exit(1);} while (0)
 
@@ -23,6 +23,7 @@ typedef struct args {
     int mode;
     int port;
     int mtu;
+    int uselzo;
     char *pwd;
     char *remote_addr_str;
 } args_t;
@@ -35,6 +36,7 @@ typedef struct ctx {
     socklen_t remote_addr_len;
     unsigned char *buf;
     unsigned char *crypto_buf;
+    unsigned char *comp_buf;
     struct sockaddr_in local_addr;
     struct sockaddr_in remote_addr;
     struct sockaddr_in temp_remote_addr;

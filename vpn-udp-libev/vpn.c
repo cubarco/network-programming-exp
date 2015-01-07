@@ -1,6 +1,7 @@
 #include "common.h"
 #include "vpn.h"
 #include "crypto.h"
+#include "compress.h"
 
 static int make_socket_non_blocking (int sfd)
 {
@@ -75,7 +76,11 @@ static void tun_cb(EV_P_ ev_io *w, int revents)
         perror("read from tunnel");
         return;
     }
-    result = crypto_encrypt(ctx_v.buf, ctx_v.crypto_buf, result);
+    if (args_v.uselzo) {
+        result = compress(ctx_v.buf, ctx_v.comp_buf, result);
+        result = crypto_encrypt(ctx_v.comp_buf, ctx_v.crypto_buf, result);
+    } else
+        result = crypto_encrypt(ctx_v.buf, ctx_v.crypto_buf, result);
     if (-1 == result)
         return;
     sendto(ctx_v.local_fd, ctx_v.crypto_buf, result, 0,
@@ -94,14 +99,20 @@ static void udp_cb(EV_P_ ev_io *w, int revents)
     result = crypto_decrypt(ctx_v.buf, ctx_v.crypto_buf, result);
     if (-1 == result)
         return;
+
     ctx_v.remote_addr = ctx_v.temp_remote_addr;
-    write(ctx_v.tun_fd, ctx_v.crypto_buf, result);
+    if (args_v.uselzo) {
+        result = decompress(ctx_v.crypto_buf, ctx_v.comp_buf, result);
+        write(ctx_v.tun_fd, ctx_v.comp_buf, result);
+    } else
+        write(ctx_v.tun_fd, ctx_v.crypto_buf, result);
+
 }
 
 static void usage(char *cmd)
 {
-    fprintf(stderr, "server: %s -s -p PORT -k PASSWORD [-m MTU]\n", cmd);
-    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-m MTU]\n", cmd);
+    fprintf(stderr, "server: %s -s -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
+    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
     exit(1);
 }
 
@@ -116,17 +127,16 @@ int main(int argc, char **argv)
 
     bzero(&ctx_v, sizeof(ctx_t));
     bzero(&args_v, sizeof(args_t));
-    args_v.mode = -1;
-    while ((opt = getopt(argc, argv, "shc:p:k:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "shCc:p:k:m:")) != -1) {
         switch (opt) {
             case 's':
                 args_v.mode = MODE_SERVER;
-                printf("server mode\n");
+                fprintf(stderr, "server mode\n");
                 break;
             case 'c':
                 args_v.mode = MODE_CLIENT;
                 args_v.remote_addr_str = strdup(optarg);
-                printf("client mode\n");
+                fprintf(stderr, "client mode\n");
                 break;
             case 'p':
                 args_v.port = atoi(optarg);
@@ -136,6 +146,10 @@ int main(int argc, char **argv)
                 break;
             case 'k':
                 args_v.pwd = strdup(optarg);
+                break;
+            case 'C':
+                args_v.uselzo = 1;
+                fprintf(stderr, "lzo compression enabled\n");
                 break;
             case 'h':
             default:
@@ -147,6 +161,7 @@ int main(int argc, char **argv)
 
     ctx_v.buf = malloc(BUFFSIZE);
     ctx_v.crypto_buf = malloc(BUFFSIZE);
+    ctx_v.comp_buf = malloc(BUFFSIZE);
     ctx_v.mode = args_v.mode;
     ctx_v.mtu = args_v.mtu == 0 ? MTU : args_v.mtu;
     if (-1 == crypto_init(args_v.pwd))
