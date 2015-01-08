@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <linux/if_tun.h>
 #include <net/if.h>
+#include <netdb.h>
 
 /* 1492(Ethernet) - 20(IPv4) - 8(UDP) - 16(SSL trailing) - 6(lzo) */
 #define MTU 1442
@@ -25,6 +26,7 @@ typedef struct args {
     int mtu;
     int uselzo;
     char *pwd;
+    char *local_addr_str;
     char *remote_addr_str;
 } args_t;
 
@@ -37,9 +39,9 @@ typedef struct ctx {
     unsigned char *buf;
     unsigned char *crypto_buf;
     unsigned char *comp_buf;
-    struct sockaddr_in local_addr;
-    struct sockaddr_in remote_addr;
-    struct sockaddr_in temp_remote_addr;
+    struct sockaddr_storage local_addr;
+    struct sockaddr_storage remote_addr;
+    struct sockaddr_storage temp_remote_addr;
 } ctx_t;
 
 struct ctx ctx_v;

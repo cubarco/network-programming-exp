@@ -22,22 +22,44 @@ static int make_socket_non_blocking (int sfd)
 
 static void local_udp_init()
 {
-    ctx_v.remote_addr_len = sizeof(ctx_v.remote_addr);
-    ctx_v.local_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    make_socket_non_blocking(ctx_v.local_fd);
-    if (ctx_v.mode == MODE_SERVER){
-        bzero(&ctx_v.local_addr, sizeof(ctx_v.local_addr));
-        ctx_v.local_addr.sin_family = AF_INET;
-        ctx_v.local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        ctx_v.local_addr.sin_port = htons(args_v.port);
-        bind(ctx_v.local_fd, (struct sockaddr*)&ctx_v.local_addr,
-                sizeof(ctx_v.local_addr));
-    } else if (ctx_v.mode == MODE_CLIENT) {
-        bzero(&ctx_v.remote_addr, sizeof(ctx_v.remote_addr));
-        ctx_v.remote_addr.sin_family = AF_INET;
-        ctx_v.remote_addr.sin_addr.s_addr = inet_addr(args_v.remote_addr_str);
-        ctx_v.remote_addr.sin_port = htons(args_v.port);
-        ctx_v.remote_addr_len = sizeof(ctx_v.remote_addr);
+    struct addrinfo hints;
+    struct addrinfo *res;
+    struct sockaddr_in *v4_addr;
+    struct sockaddr_in6 *v6_addr;
+    char *addr_str;
+    bzero(&hints, sizeof(hints));
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_protocol = IPPROTO_UDP;
+    if (ctx_v.mode == MODE_SERVER) {
+        v6_addr = (struct sockaddr_in6 *)&ctx_v.local_addr;
+        v4_addr = (struct sockaddr_in *)&ctx_v.local_addr;
+        addr_str = args_v.local_addr_str;
+    } else {
+        v6_addr = (struct sockaddr_in6 *)&ctx_v.remote_addr;
+        v4_addr = (struct sockaddr_in *)&ctx_v.remote_addr;
+        addr_str = args_v.remote_addr_str;
+    }
+    if (0 != (result = getaddrinfo(addr_str, NULL, &hints, &res))) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
+        exit(1);
+    }
+    ctx_v.local_fd = socket(res->ai_family, SOCK_DGRAM, IPPROTO_UDP);
+    if (res->ai_family == AF_INET) {
+        v4_addr->sin_family = AF_INET;
+        inet_aton(addr_str, &v4_addr->sin_addr);
+        v4_addr->sin_port = htons(args_v.port);
+        ctx_v.remote_addr_len = sizeof(struct sockaddr_in);
+        if (ctx_v.mode == MODE_SERVER)
+            bind(ctx_v.local_fd, (struct sockaddr *)&ctx_v.local_addr,
+                    sizeof(struct sockaddr_in));
+    } else if (res->ai_family == AF_INET6) {
+        v6_addr->sin6_family = AF_INET6;
+        inet_pton(AF_INET6, addr_str, &v6_addr->sin6_addr);
+        v6_addr->sin6_port = htons(args_v.port);
+        ctx_v.remote_addr_len = sizeof(struct sockaddr_in6);
+        if (ctx_v.mode == MODE_SERVER)
+            bind(ctx_v.local_fd, (struct sockaddr *)&ctx_v.local_addr,
+                    sizeof(struct sockaddr_in6));
     }
 }
 
@@ -111,7 +133,7 @@ static void udp_cb(EV_P_ ev_io *w, int revents)
 
 static void usage(char *cmd)
 {
-    fprintf(stderr, "server: %s -s -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
+    fprintf(stderr, "server: %s -s LOCAL_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
     fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
     exit(1);
 }
@@ -127,10 +149,11 @@ int main(int argc, char **argv)
 
     bzero(&ctx_v, sizeof(ctx_t));
     bzero(&args_v, sizeof(args_t));
-    while ((opt = getopt(argc, argv, "shCc:p:k:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "hCs:c:p:k:m:")) != -1) {
         switch (opt) {
             case 's':
                 args_v.mode = MODE_SERVER;
+                args_v.local_addr_str = strdup(optarg);
                 fprintf(stderr, "server mode\n");
                 break;
             case 'c':
