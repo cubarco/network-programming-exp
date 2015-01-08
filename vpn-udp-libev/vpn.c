@@ -44,6 +44,7 @@ static void local_udp_init()
         exit(1);
     }
     ctx_v.local_fd = socket(res->ai_family, SOCK_DGRAM, IPPROTO_UDP);
+    make_socket_non_blocking(ctx_v.local_fd);
     if (res->ai_family == AF_INET) {
         v4_addr->sin_family = AF_INET;
         inet_aton(addr_str, &v4_addr->sin_addr);
