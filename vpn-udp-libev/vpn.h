@@ -12,13 +12,29 @@
 #include <net/if.h>
 #include <netdb.h>
 
-/* 1492(Ethernet) - 20(IPv4) - 8(UDP) - 16(SSL trailing) - 6(lzo) */
+/* 
+ * MTU = 1492(Ethernet) - 20(IPv4 or 40 for IPv6) - 8(UDP) - 16(SSL trailing) -
+ * 6(lzo)
+ */
 #define MTU 1442
 #define BUFFSIZE 1500
 #define MODE_SERVER 1 
 #define MODE_CLIENT 2
 
+#define DEBUG
 #define PERROR(s) do {perror(s); exit(1);} while (0)
+#define LOGE(...) err(1, __VA_ARGS__)
+#ifdef DEBUG
+    #define LOGD(...) err(0, ##__VA_ARGS__)
+#else
+    #define LOGD(...)
+#endif
+#define err(iserr, ...) do { \
+    fprintf(stderr, ##__VA_ARGS__); \
+    if (iserr) \
+        exit(1); \
+} while(0)
+
 
 typedef struct args {
     int mode;

@@ -39,10 +39,8 @@ static void local_udp_init()
         v4_addr = (struct sockaddr_in *)&ctx_v.remote_addr;
         addr_str = args_v.remote_addr_str;
     }
-    if (0 != (result = getaddrinfo(addr_str, NULL, &hints, &res))) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
-        exit(1);
-    }
+    if (0 != (result = getaddrinfo(addr_str, NULL, &hints, &res)))
+        LOGE("getaddrinfo: %s\n", gai_strerror(result));
     ctx_v.local_fd = socket(res->ai_family, SOCK_DGRAM, IPPROTO_UDP);
     make_socket_non_blocking(ctx_v.local_fd);
     if (res->ai_family == AF_INET) {
@@ -134,9 +132,8 @@ static void udp_cb(EV_P_ ev_io *w, int revents)
 
 static void usage(char *cmd)
 {
-    fprintf(stderr, "server: %s -s LOCAL_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
-    fprintf(stderr, "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd);
-    exit(1);
+    LOGE("server: %s -s LOCAL_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n" \
+         "client: %s -c SERVER_ADDRESS -p PORT -k PASSWORD [-C] [-m MTU]\n", cmd, cmd);
 }
 
 int main(int argc, char **argv)
@@ -155,12 +152,12 @@ int main(int argc, char **argv)
             case 's':
                 args_v.mode = MODE_SERVER;
                 args_v.local_addr_str = strdup(optarg);
-                fprintf(stderr, "server mode\n");
+                LOGD("server mode\n");
                 break;
             case 'c':
                 args_v.mode = MODE_CLIENT;
                 args_v.remote_addr_str = strdup(optarg);
-                fprintf(stderr, "client mode\n");
+                LOGD("client mode\n");
                 break;
             case 'p':
                 args_v.port = atoi(optarg);
@@ -173,7 +170,7 @@ int main(int argc, char **argv)
                 break;
             case 'C':
                 args_v.uselzo = 1;
-                fprintf(stderr, "lzo compression enabled\n");
+                LOGD("lzo compression enabled\n");
                 break;
             case 'h':
             default:
